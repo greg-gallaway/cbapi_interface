@@ -2,6 +2,72 @@ import cbapi
 import sys
 import optparse
 
+'''
+This script allows the user to interact with a carbon black server from command
+line. You are able to display server info, perform a process search either with
+one argument or from a file containing many args.
+
+example usage:
+
+#Displaying Server Info
+#
+gregory@Gregorys-MBP:~/Documents/slaitcode/webapp$ python cbapi_interface.py
+--cburl=https://cbserver.example.com --apitoken=73acn5d8dk5mcjvjdjxxxxx4xxxxxx5aaabaaaxx
+--no-ssl-verify --server-info
+
+
+Server: https://cbserver.example.com
+--------------------------------------------------------------------------------
+binaryPageSize                 : 10
+linuxInstallerExists           : True
+binaryOrder                    :
+banningEnabled                 : True
+timestampDeltaThreshold        : 5
+maxRowsSolrReportQuery         : 10000
+osxInstallerExists             : True
+version_release                : 5.1.0-3
+liveResponseAutoAttach         : True
+version                        : 5.1.0.150914.1400
+cblrEnabled                    : True
+processOrder                   :
+processPageSize                : 10
+vdiGloballyEnabled             : False
+searchExportCount              : 1000
+maxSearchResultRows            : 1000
+
+#Perfroming Binary search from single argument
+#
+gregory@Gregorys-MBP:~/Documents/app$ python cbapi_interface.py -
+-cburl=https://cbserver.example.com
+--apitoken=73acn5d8dk5mcjvjdjxxxxx4xxxxxx5aaabaaaxx --no-ssl-verify --binary-search='calc'
+
+Displayed Results    : 1
+Total Results        : 1
+QTime                : 14ms
+
+
+#Conducting process search from a file of queries
+#the file test-file.txt contains 3 lines with the strings "calc.exe", "GRR",
+#and "lsass.exe"
+#
+gregory@Gregorys-MBP:~/Documents/app/cbapi_interface$ python cbapi_interface.py
+--cburl=https://cbserver.example.com --apitoken=73acn5d8dk5mcjvjdjxxxxx4xxxxxx5aaabaaaxx
+--no-ssl-verify --process-search-file="../test-file.txt"
+
+------------------------------
+Search Query | calc.exe
+Resulting Processes | 6
+Resulting Hosts | sc-31138 (100.0%)
+------------------------------
+Search Query | GRR
+Resulting Processes | 8
+Resulting Hosts | sc-31138 (62.5%)|gregorys-mbp (37.5%)
+------------------------------
+Search Query | lsass.exe
+Resulting Processes | 17
+Resulting Hosts | sc-31138 (47.1%)|gregorys-mbp (41.2%)|sc-31148 (11.8%)
+'''
+
 class cbConnect:
     'The cbConnect class is meant for connecting with\
     a Carbon Black server via the Carbon Black API'
@@ -60,6 +126,7 @@ class cbDisplay:
     	print "\n\n"
 
     def processSearch(self):
+        'performing a process search form one argument'
         print "Process Search across CB server for query string: " + self.query
         print "-" * 80
         print "%s,%s,%s,%s,%s,%s" % ("hostname", "username", "start", "parent_path", "path", "cmdline")
@@ -74,6 +141,7 @@ class cbDisplay:
                                              proc_details.get('cmdline'))
 
     def binarySearch(self):
+        'conducting binary search from one argument'
         # perform a single binary search
         #
         binaries = self.cbConnection.binary_search(self.query)
@@ -103,11 +171,13 @@ class cbDisplay:
             print '\n'
 
     def processSearchList(self):
+        'cleaning up a file for use with ProcessSearchFile method'
         with open(self.procnamefile) as tmp:
             lines = filter(None, [line.strip() for line in tmp])
         return lines
 
     def processSearchFile(self, searchprocess):
+        'conducting a process search from a file of queries'
         for search in searchprocess:
             data = self.cbConnection.process_search(search, rows=1)
             if 0 != (data['total_results']):
