@@ -1,8 +1,5 @@
 import cbapi
 import sys
-import struct
-import socket
-import json
 import optparse
 
 class cbConnect:
