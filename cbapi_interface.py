@@ -1,6 +1,7 @@
 import cbapi
 import sys
 import optparse
+from cbapi.util.live_response_helpers import LiveResponseHelper
 
 '''
 This script allows the user to interact with a carbon black server from command
@@ -57,7 +58,7 @@ gregory@Gregorys-MBP:~/Documents/app/cbapi_interface$ python cbapi_interface.py
 ------------------------------
 Search Query | calc.exe
 Resulting Processes | 6
-Resulting Hosts | sc-31138 (100.0%)
+Resulting Hosts | hostname_1 (100.0%)
 ------------------------------
 Search Query | GRR
 Resulting Processes | 8
@@ -86,12 +87,13 @@ class cbDisplay:
     'The cbDisplay class is meant for pulling info from\
      a CB server using an active instance of the cbConnect\
      class'
-    def __init__(self, cburl, cbConnection, query=None, procnamefile=None):
+    def __init__(self, cburl, cbConnection, query=None, procnamefile=None, sensorid=None):
         self.cbConnection=cbConnection
         self.cburl=cburl
         self.query=query
         self.connectionInfo=cbConnection.info()
         self.procnamefile=procnamefile
+        self.sensorid=sensorid
 
     def displayServerInfo(self):
         print "\n\n" + "Server: " + self.cburl
@@ -103,8 +105,7 @@ class cbDisplay:
         return keylist
 
     def displaySensors(self):
-        sensors = cbConnection.sensors()
-        slist = []
+        sensors = self.cbConnection.sensors()
         print "::List of each Carbon Black Sensor::\n"
         for sensor in sensors:
             print "%-20s : %s" % ("computer name", sensor['computer_name'])
@@ -113,16 +114,19 @@ class cbDisplay:
             print "%-20s : %s" % ("sensor id", sensor['id'])
             print "%-20s : %s" % ("os", sensor['os_environment_display_string'])
             print "%-20s : %s" % ("last checkin time", sensor['last_checkin_time']) + "\n\n"
+
+    def returnSensors(self):
+        sensors = self.cbConnection.sensors()
+        slist = []
+        for sensor in sensors:
             slist.append(sensor['id'])
         return slist
 
-    def displaySensorDetails(self, sensorid):
-        sensorInfos = []
+    def displaySensorDetails(self):
         print "::Detailed Info for each CB Sensor::\n"
-        for id in sensorid:
-            crap = cbConnection.sensor(id)
-            for key in crap.keys():
-                print "%-35s : %s" % (key,crap[key])
+        crap = self.cbConnection.sensor(self.sensorid)
+        for key in crap.keys():
+            print "%-35s : %s" % (key,crap[key])
     	print "\n\n"
 
     def processSearch(self):
@@ -190,6 +194,31 @@ class cbDisplay:
                     hosts.append("%s (%s%%)" % (term['name'], term['ratio']))
                 print "Resulting Hosts | "+"|".join(hosts)
 
+    def hostStatus(self, hosts, system):
+        hostList = hosts
+        for host in hostList:
+            crap = self.cbConnection.sensor(host)
+            if crap['computer_name'] == system:
+                if crap['status'] == 'Online':
+                    print crap['computer_name'],crap['id'],crap['status']
+                    return crap['id']
+                else:
+                    print "host %s with sensor id: " % system + str(crap['id']) + " is currently offline"
+
+
+    def LRcollection(self, host):
+        lfile = 'lr.exe'
+        rfile = 'C:\lr.exe'
+        sensor_id = host
+        lrh = LiveResponseHelper(self.cbConnection, sensor_id)
+        lrh.start()
+
+        print "[*] Attempting to upload file: %s" % lfile
+        results = lrh.put_file(rfile, lfile)
+        print "\n[+] Results:\n============"
+        for i in results:
+            print i + ' = ' + str(results[i])
+        lrh.stop()
 
 def build_cli_parser():
     parser = optparse.OptionParser(usage="%prog [options]", description="Interact with Carbon Black API")
@@ -210,6 +239,12 @@ def build_cli_parser():
                       help="Conduct binary search")
     parser.add_option("-f", "--process-search-file", action="store", default=False, dest="procsearchfile",
                       help="Conduct process search from file of queries")
+    parser.add_option("-m", "--sensor-list", action="store_true", default=False, dest="sensorlist",
+                      help="Display list of sensors")
+    parser.add_option("-d", "--sensor-details", action="store", default=False, dest="sensordetails",
+                      help="Display list of sensors")
+    parser.add_option("-l", "--live-response", action="store", default=False, dest="liveresponse",
+                      help="Conduct live response if host is online")
 
     return parser
 
@@ -226,6 +261,10 @@ def main(argv):
 
     if opts.process_query:
         cbDisplay(opts.server_url, cb1, query=opts.process_query).processSearch()
+    if opts.sensorlist:
+        cbDisplay(opts.server_url, cb1).displaySensors()
+    if opts.sensordetails:
+        cbDisplay(opts.server_url, cb1, sensorid=opts.sensordetails).displaySensorDetails()
     if opts.server_info:
         cbDisplay(opts.server_url, cb1).displayServerInfo()
     if opts.binary_query:
@@ -233,8 +272,10 @@ def main(argv):
     if opts.procsearchfile:
         searchprocess = cbDisplay(opts.server_url, cb1, procnamefile=opts.procsearchfile).processSearchList()
         cbDisplay(opts.server_url, cb1).processSearchFile(searchprocess)
-
-
+    if opts.liveresponse:
+        sensorList = cbDisplay(opts.server_url, cb1).returnSensors()
+        currSystem = cbDisplay(opts.server_url, cb1).hostStatus(sensorList, opts.liveresponse)
+        cbDisplay(opts.server_url, cb1).LRcollection(currSystem)
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
