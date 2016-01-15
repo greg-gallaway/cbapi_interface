@@ -1,5 +1,5 @@
 import cbapi
-import sys
+import sys, time
 import optparse
 from cbapi.util.live_response_helpers import LiveResponseHelper
 
@@ -82,6 +82,21 @@ class cbConnect:
         cbConnection = cbapi.CbApi(self.cburl, token=self.apitoken, ssl_verify=False)
         return cbConnection
 
+class printObjects:
+    'A class for printing objects to console\
+    which is meant for separating print statemnts\
+    out of the primary code for CB server interaction'
+
+    def __init__(self, cburl, testObject):
+        self.testObject = testObject
+        self.cburl = cburl
+
+    def consolePrintTest(self):
+        print"\n\n" + "Server: " + self.cburl
+        print "-" * 80
+        for key in self.testObject:
+            print key
+
 
 class cbDisplay:
     'The cbDisplay class is meant for pulling info from\
@@ -95,16 +110,53 @@ class cbDisplay:
         self.procnamefile=procnamefile
         self.sensorid=sensorid
 
+    def returnServerInfo(self):
+        'returns dictionary object containing basic server info'
+        serverInfo = {}
+        for key in self.connectionInfo.keys():
+            serverInfo[key] = self.connectionInfo[key]
+        return serverInfo
+
     def displayServerInfo(self):
-        print "\n\n" + "Server: " + self.cburl
-        print "-" * 80
-        keylist = []
+        'print to console basic server info'
         for key in self.connectionInfo.keys():
             print "%-30s : %s" % (key, self.connectionInfo[key])
-            keylist.append("%-30s : %s" % (key, self.connectionInfo[key]))
-        return keylist
 
-    def displaySensors(self):
+    def returnSensors(self):
+        'returns dictionary object conatining all sensors along\
+         with all attributes related to each sensor'
+        sensorList = {}
+        index = 0
+        for key in self.cbConnection.sensors():
+            for keys,values in key.items():
+                sensorList[keys] = values
+        return sensorList
+
+    def returnSensorsIDs(self):
+        'returns list object containing list of sensor IDs'
+        sensors = self.cbConnection.sensors()
+        slist = []
+        for sensor in sensors:
+            slist.append(sensor['id'])
+        return slist
+
+    def displaySensorsExtended(self):
+        'prints to console a list of sensors with all related\
+         attributes included'
+        sensorList = {}
+        index = 0
+        for key in self.cbConnection.sensors():
+            print "Computer Name: " + key['computer_name']
+            print "-"*40
+            for keys,values in key.items():
+                sensorList[keys] = values
+                print "%-30s : %s" % (keys,values)
+            print "\n"
+
+    def displaySensorsShort(self):
+        'prints to console a list of sensors only with (status, \
+         name, ID, Operating System & last checkin time)'
+
         sensors = self.cbConnection.sensors()
         print "::List of each Carbon Black Sensor::\n"
         for sensor in sensors:
@@ -113,16 +165,13 @@ class cbDisplay:
             print "%-20s : %s" % ("sensor_group_id", sensor['group_id'])
             print "%-20s : %s" % ("sensor id", sensor['id'])
             print "%-20s : %s" % ("os", sensor['os_environment_display_string'])
-            print "%-20s : %s" % ("last checkin time", sensor['last_checkin_time']) + "\n\n"
-
-    def returnSensors(self):
-        sensors = self.cbConnection.sensors()
-        slist = []
-        for sensor in sensors:
-            slist.append(sensor['id'])
-        return slist
+            print "%-20s : %s" % ("last checkin time", sensor['last_checkin_time'])
+            print "%-20s : %s" % ("status", sensor['status']) + "\n\n"
 
     def displaySensorDetails(self):
+        'prints to console details of one sensor\
+         requires sensor ID as argument for calling'
+
         print "::Detailed Info for each CB Sensor::\n"
         crap = self.cbConnection.sensor(self.sensorid)
         for key in crap.keys():
@@ -130,7 +179,8 @@ class cbDisplay:
     	print "\n\n"
 
     def processSearch(self):
-        'performing a process search form one argument'
+        'prints to console - performing a process search from one argument'
+
         print "Process Search across CB server for query string: " + self.query
         print "-" * 80
         print "%s,%s,%s,%s,%s,%s" % ("hostname", "username", "start", "parent_path", "path", "cmdline")
@@ -145,7 +195,7 @@ class cbDisplay:
                                              proc_details.get('cmdline'))
 
     def binarySearch(self):
-        'conducting binary search from one argument'
+        'prints to console - conducting binary search from one argument'
         # perform a single binary search
         #
         binaries = self.cbConnection.binary_search(self.query)
@@ -175,13 +225,17 @@ class cbDisplay:
             print '\n'
 
     def processSearchList(self):
-        'cleaning up a file for use with ProcessSearchFile method'
+        'returns list object containing lines of file stripped\
+         cleaning up a file for use with ProcessSearchFile method'
         with open(self.procnamefile) as tmp:
             lines = filter(None, [line.strip() for line in tmp])
         return lines
 
     def processSearchFile(self, searchprocess):
-        'conducting a process search from a file of queries'
+        'prints to console - conducting a process search \
+         from a file of queries. Accepts as argument the list of\
+         lines produced from processSearchList() method'
+
         for search in searchprocess:
             data = self.cbConnection.process_search(search, rows=1)
             if 0 != (data['total_results']):
@@ -195,6 +249,9 @@ class cbDisplay:
                 print "Resulting Hosts | "+"|".join(hosts)
 
     def hostStatus(self, hosts, system):
+        'prints to console whether host is online/offline and returns ID\
+         of system is the system is onine'
+
         hostList = hosts
         for host in hostList:
             crap = self.cbConnection.sensor(host)
@@ -207,18 +264,54 @@ class cbDisplay:
 
 
     def LRcollection(self, host):
+        'prints to console & Performs Live Response for a system- accepts\
+         target hostname as argument. checks online status and if online\
+         pushes collection script and attempts to execute lr.exe on host'
+
         lfile = 'lr.exe'
         rfile = 'C:\lr.exe'
         sensor_id = host
         lrh = LiveResponseHelper(self.cbConnection, sensor_id)
         lrh.start()
 
+
         print "[*] Attempting to upload file: %s" % lfile
         results = lrh.put_file(rfile, lfile)
         print "\n[+] Results:\n============"
         for i in results:
             print i + ' = ' + str(results[i])
+        print "attempting to execute %s" % rfile
+
+
+        print lrh.execute("C:\lr.exe -y -gm2")
+        time.sleep(7)
+
+        print "attempting to execute bat script"
+        print lrh.execute("""C:\lr\\tr3-collect.bat SC-31148 C 4 AKIAI3RI4ODHYKG5NOBA LZ+x53B9gGUbbycvzg2fIgx63VI9/URO4ZXx+aXK p@ssw0rd""")
+
+        for process in lrh.process_list():
+            print process['pid']
+            print process['command_line']
+            print process['path']
+
         lrh.stop()
+
+    def returnHashes(self):
+        'return list object containing md5 hashes pulled from\
+         team cymru malware hashes file'
+        import json
+        lists = []
+        with open('hashes-cb.json') as rb:
+            data = json.load(rb)
+
+        for x in range(0,len(data["reports"])):
+            iocs = data["reports"][x]["iocs"]
+            for keys, values in iocs.items():
+                for line in values:
+                    lists.append(line)
+        return lists
+
+
 
 def build_cli_parser():
     parser = optparse.OptionParser(usage="%prog [options]", description="Interact with Carbon Black API")
@@ -240,11 +333,15 @@ def build_cli_parser():
     parser.add_option("-f", "--process-search-file", action="store", default=False, dest="procsearchfile",
                       help="Conduct process search from file of queries")
     parser.add_option("-m", "--sensor-list", action="store_true", default=False, dest="sensorlist",
-                      help="Display list of sensors")
+                      help="Display list of sensors only showing hostname, ID, OS, status & last checkin")
+    parser.add_option("-S", "--sensor-list-extended", action="store_true", default=False, dest="sensorlistextended",
+                      help="Display list of sensors with all related attributes included")
     parser.add_option("-d", "--sensor-details", action="store", default=False, dest="sensordetails",
-                      help="Display list of sensors")
+                      help="Display extended information for one sensor given by sensor ID")
     parser.add_option("-l", "--live-response", action="store", default=False, dest="liveresponse",
                       help="Conduct live response if host is online")
+    parser.add_option("-i", "--cymru-intel", action="store_true", default=False, dest="cymru",
+                      help="scan cymru intel for matches on server")
 
     return parser
 
@@ -262,20 +359,26 @@ def main(argv):
     if opts.process_query:
         cbDisplay(opts.server_url, cb1, query=opts.process_query).processSearch()
     if opts.sensorlist:
-        cbDisplay(opts.server_url, cb1).displaySensors()
+        cbDisplay(opts.server_url, cb1).displaySensorsShort()
+    if opts.sensorlistextended:
+        cbDisplay(opts.server_url, cb1).displaySensorsExtended()
     if opts.sensordetails:
         cbDisplay(opts.server_url, cb1, sensorid=opts.sensordetails).displaySensorDetails()
     if opts.server_info:
         cbDisplay(opts.server_url, cb1).displayServerInfo()
+        cbDisplay(opts.server_url, cb1).returnServerInfo()
     if opts.binary_query:
         cbDisplay(opts.server_url, cb1, query=opts.binary_query).binarySearch()
     if opts.procsearchfile:
         searchprocess = cbDisplay(opts.server_url, cb1, procnamefile=opts.procsearchfile).processSearchList()
         cbDisplay(opts.server_url, cb1).processSearchFile(searchprocess)
     if opts.liveresponse:
-        sensorList = cbDisplay(opts.server_url, cb1).returnSensors()
+        sensorList = cbDisplay(opts.server_url, cb1).returnSensorsIDs()
         currSystem = cbDisplay(opts.server_url, cb1).hostStatus(sensorList, opts.liveresponse)
         cbDisplay(opts.server_url, cb1).LRcollection(currSystem)
+    if opts.cymru:
+        searchList = cbDisplay(opts.server_url, cb1).returnHashes()
+        cbDisplay(opts.server_url, cb1).processSearchFile(searchList)
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
