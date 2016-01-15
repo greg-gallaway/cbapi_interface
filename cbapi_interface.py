@@ -82,21 +82,6 @@ class cbConnect:
         cbConnection = cbapi.CbApi(self.cburl, token=self.apitoken, ssl_verify=False)
         return cbConnection
 
-class printObjects:
-    'A class for printing objects to console\
-    which is meant for separating print statemnts\
-    out of the primary code for CB server interaction'
-
-    def __init__(self, cburl, testObject):
-        self.testObject = testObject
-        self.cburl = cburl
-
-    def consolePrintTest(self):
-        print"\n\n" + "Server: " + self.cburl
-        print "-" * 80
-        for key in self.testObject:
-            print key
-
 
 class cbDisplay:
     'The cbDisplay class is meant for pulling info from\
